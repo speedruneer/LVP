@@ -1,6 +1,6 @@
 -- main.lua
-local path = "fnaf.lvid"
-local supportedFormats = {"00.01", "00.63"}
+local path = "default.lvid"
+local supportedFormats = {"00.01", "05.10"}
 
 -- Try to detect format
 local format
