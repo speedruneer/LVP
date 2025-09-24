@@ -2,10 +2,32 @@
 local path = "default.lvid"
 local supportedFormats = {"00.01", "05.10"}
 
--- Try to detect format
+-- Safe print replacement for terminal / debugging
+local function safePrint(...)
+    print(...)
+    local args = {...}
+    for i = 1, #args do
+        args[i] = tostring(args[i])
+    end
+    local line = table.concat(args, " ")
+    -- Use love.filesystem to log, or fallback to standard print
+    if love and love.filesystem then
+        -- Example: write to log file
+        print(love.filesystem.setRequirePath("./?.lua;./?/init.lua"))
+        local f = love.filesystem.newFile("lvp_log.txt", "w")
+        f:open("a")
+        f:write(line.."\n")
+        f:close()
+    else
+        print(line)
+    end
+end
+
+-- Detect format
 local format
 local file = io.open(path, "rb")
 if not file then
+    safePrint("Error: Cannot open file " .. path)
     os.execute('zenity --error --text="Error: Cannot open file ' .. path .. '"')
     os.exit()
 end
@@ -23,20 +45,26 @@ for _, f in ipairs(supportedFormats) do
 end
 
 if not isSupported then
+    safePrint("Error: Unsupported LVID format: " .. format)
     os.execute('zenity --error --text="Error: Unsupported LVID format: ' .. format .. '"')
     os.exit()
 end
 
 -- Load plugin safely
 local success, lvp = pcall(function()
-    return require("plugins." .. ({string.gsub(format, "%.", "-")})[1])
+    local pluginName = "p"..({format:gsub("%.", "")})[1]
+    safePrint("Loading plugin:", pluginName)
+    return require(pluginName)
 end)
 
 if not success or not lvp then
+    print(lvp)
+    safePrint("Error: Failed to load LVP plugin for format " .. format)
     os.execute('zenity --error --text="Error: Failed to load LVP plugin for format ' .. format .. '"')
     os.exit()
 end
 
+-- Format time helper
 local function formatTime(seconds)
     seconds = math.floor(seconds)
     local h = math.floor(seconds / 3600)
@@ -49,7 +77,7 @@ local function formatTime(seconds)
     end
 end
 
--- Video setup
+-- Video state
 local idx = 1
 local framerate = 60
 local timer = 0
@@ -57,63 +85,49 @@ local currentFrame
 local currentAudio
 local frameCount = 0
 local paused = false
--- Load first frame in love.load
+
+-- Load first frame
 function love.load()
     love.window.setMode(640, 360, {resizable=true})
     love.window.setTitle("LVP - " .. path)
-    -- Grab first frame and audio
     currentFrame, currentAudio, frameCount = lvp.lvp_makeFrame(idx, path, framerate)
     if currentAudio then currentAudio:play() end
 end
 
--- Update every frame
 function love.update(dt)
     if not paused then
         timer = timer + dt
         if timer >= 1/framerate then
             timer = timer - 1/framerate
-
-            -- Advance frame
             idx = idx + 1
-
-            -- If video ended, stop
-            local file = love.filesystem.getInfo(path)
-            if not file then return end
-
-            -- Load next frame
+            -- Stop at end
+            if idx > frameCount then return end
             currentFrame, currentAudio = lvp.lvp_makeFrame(idx, path, framerate)
             if currentAudio then currentAudio:play() end
         end
     end
 end
 
--- Draw current frame
 function love.draw()
     if currentFrame then
         lvp.lvp_renderFrame(currentFrame, 0, 0)
     end
-    local r, g, b = love.graphics.getColor()
+
+    local w, h = love.graphics.getWidth(), love.graphics.getHeight()
     love.graphics.setColor(0.5, 0.5, 0.5)
-    love.graphics.rectangle("fill", 0, love.graphics.getHeight()-30, love.graphics.getWidth(),4)
+    love.graphics.rectangle("fill", 0, h-30, w, 4)
     love.graphics.setColor(1, 0, 0)
-    love.graphics.rectangle("fill", 0, love.graphics.getHeight()-30, math.floor((idx / frameCount) * love.graphics.getWidth()),4)
-    if paused then love.graphics.circle("fill", math.floor((idx / frameCount) * love.graphics.getWidth()), love.graphics.getHeight()-28, 6) end
-    love.graphics.setColor(1, 1, 1) -- white text
-    local currentTime = formatTime(idx / framerate)
-    local totalTime = formatTime(frameCount / framerate)
-    love.graphics.print(currentTime .. " / " .. totalTime, 10, love.graphics.getHeight() - 20)
+    love.graphics.rectangle("fill", 0, h-30, math.floor((idx / frameCount) * w), 4)
+    if paused then love.graphics.circle("fill", math.floor((idx / frameCount) * w), h-28, 6) end
+    love.graphics.setColor(1, 1, 1)
+    love.graphics.print(formatTime(idx / framerate) .. " / " .. formatTime(frameCount / framerate), 10, h - 20)
 end
 
--- Optional: simple key controls
 function love.keypressed(key)
     if key == "space" then
         paused = not paused
         if currentAudio then
-            if currentAudio:isPlaying() then
-                currentAudio:pause()
-            else
-                currentAudio:play()
-            end
+            if currentAudio:isPlaying() then currentAudio:pause() else currentAudio:play() end
         end
     elseif key == "left" then
         idx = math.max(1, idx - framerate*5)
