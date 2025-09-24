@@ -15,20 +15,15 @@ Compression types:
 
 Image Formats:
 0 - RAW BMP 8bpp palette indexed
-1 - RAW RGB332
-2 - RAW RGB565
-3 - RAW RGB888
-4->255 - IF PLUGINS FOR IT
+1 - RAW RGB565
+2 - RAW RGB24
+3->255 - IF PLUGINS FOR IT
 
 Audio Formats:
-0 - wav
-1 - MPEG-3
-2 - PCM-8 mono
-3 - PCM-8 stereo
-4 - PCM-16 mono
-5 - PCM-16 stereo
-6 - none
-7->255 - IF PLUGINS FOR IT
+0 - PCM-8 mono
+1 - PCM-16 mono
+2 - none
+3->255 - IF PLUGINS FOR IT
 ]]
 local _LVID_VERSION = "05.10"
 
@@ -36,12 +31,29 @@ local function compressData(data)
     return love.data.compress("string", "lz4", data, 9)
 end
 
+-- Convert integer to 2-byte string
+local function intTo2Bytes(n)
+    local g = math.floor(n/256)%256
+    local b = n%256
+    return string.char(b, g)
+end
+
+-- Convert integer to 4-byte string
+local function intTo4Bytes(n)
+    local d = math.floor(n/(256*256*256))%256
+    local c = math.floor(n/(256*256))%256
+    local b = math.floor(n/256)%256
+    local a = n%256
+    return string.char(a, b, c, d)
+end
+
 local args = {...}
 local videopath = ""
 local framerate = 60
-local audioencoding = 4 -- yes, I will use PCM-16 mono as a default
+local audioencoding = 1 -- yes, I will use PCM-16 mono as a default
 local audiosamplerate = 96 -- Some CASUAL 96KHz PCM-16 mono and?
 local outputpath = "default.lvid"
+local frameformat = 2 -- yes default RGB24
 
 for _, v in pairs(args) do
     if v:sub(1, 1) == "-" then
@@ -59,3 +71,7 @@ for _, v in pairs(args) do
         end
     end
 end
+local pixelFormats = {"pal8", "rgb565le", "rgb24"}
+local audioformats = {"u8", "s16le"}
+local ffmpegCMD1 = string.format("mkdir .tmp && ffmpeg -i %s -r %d -pix_fmt %s .tmp/frame_%%08d.bmp", videopath, framerate, pixelFormats[frameformat+1])
+local ffmpegCMD2 = string.format("ffmpeg -i %s -ar %d -ac %d -f %s .tmpoutput", videopath, audiosamplerate, audioformats[audioencoding+1])
