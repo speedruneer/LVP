@@ -1,6 +1,16 @@
 -- main.lua
-local path = "default.lvid"
+local path = "fnaf.lvid"
 local supportedFormats = {"00.01", "05.10"}
+
+-- Measures time taken by a function and prints it
+function time(fn, name, ...)
+    local startTime = os.clock()
+    local result = {fn(...)}          -- call the function with any args, store results
+    local endTime = os.clock()
+    local elapsed = endTime - startTime
+    print(string.format("⏱ Function: %s took %.6f seconds", name, elapsed))
+    return unpack(result)        -- return all original results
+end
 
 -- Safe print replacement for terminal / debugging
 local function safePrint(...)
@@ -85,12 +95,13 @@ local currentFrame
 local currentAudio
 local frameCount = 0
 local paused = false
+local width, height = 640, 360
 
 -- Load first frame
 function love.load()
-    love.window.setMode(640, 360, {resizable=true})
     love.window.setTitle("LVP - " .. path)
-    currentFrame, currentAudio, frameCount = lvp.lvp_makeFrame(idx, path, framerate)
+    currentFrame, currentAudio, frameCount, framerate, width, height = time(lvp.lvp_makeFrame, "lvp.lvp_makeFrame", idx, path, framerate)
+    love.window.setMode(width, height, {resizable=true})
     if currentAudio then currentAudio:play() end
 end
 
@@ -102,7 +113,7 @@ function love.update(dt)
             idx = idx + 1
             -- Stop at end
             if idx > frameCount then return end
-            currentFrame, currentAudio = lvp.lvp_makeFrame(idx, path, framerate)
+            currentFrame, currentAudio = time(lvp.lvp_makeFrame, "lvp.lvp_makeFrame", idx, path, framerate)
             if currentAudio then currentAudio:play() end
         end
     end
@@ -110,7 +121,7 @@ end
 
 function love.draw()
     if currentFrame then
-        lvp.lvp_renderFrame(currentFrame, 0, 0)
+        time(lvp.lvp_renderFrame, "lvp.lvp_renderFrame", currentFrame, 0, 0)
     end
 
     local w, h = love.graphics.getWidth(), love.graphics.getHeight()
@@ -121,6 +132,8 @@ function love.draw()
     if paused then love.graphics.circle("fill", math.floor((idx / frameCount) * w), h-28, 6) end
     love.graphics.setColor(1, 1, 1)
     love.graphics.print(formatTime(idx / framerate) .. " / " .. formatTime(frameCount / framerate), 10, h - 20)
+    love.graphics.print(love.timer.getFPS(), 1, 1)
+    love.window.setTitle(love.timer.getFPS() .. " " .. path)
 end
 
 function love.keypressed(key)
